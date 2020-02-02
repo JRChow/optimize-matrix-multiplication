@@ -20,27 +20,24 @@ static void inline do_block_naive(int lda, int M, int N, int K, double *A, doubl
         //For each column j of B
         for (int j = 0; j < N; ++j) {
             // Compute C(i,j)
-            double cij = C[i + j * lda];
+            double cij = C[i * lda + j];
             for (int k = 0; k < K; ++k) {
-                cij += A[i * lda + k] * B[k + j * lda];
+                cij += A[i * lda + k] * B[k * lda + j];
             }
-            C[i + j * lda] = cij;
+            C[i * lda + j] = cij;
         }
     }
 }
 
 static void inline do_block(int lda, int M, int N, int K, double *A, double *B, double *C) {
-    // For each row i of A
     for (int i = 0; i < M; ++i) {
-        //For each column j of B
-        for (int j = 0; j < N; ++j) {
-            // Compute C(i,j)
-            double cij = C[i + j * lda];
-            for (int k = 0; k < K; ++k) {
-                cij += A[i * lda + k] * B[k + j * lda];
-            }
-            C[i + j * lda] = cij;
+        __m256d Cval = _mm256_loadu_pd(C + i * lda);
+        for (int k = 0; k < K; ++k) {
+            __m256d Aval = _mm256_set1_pd(A[i * lda + k]);
+            __m256d Bval = _mm256_loadu_pd(B + k * lda);
+            Cval = _mm256_fmadd_pd(Aval, Bval, Cval);
         }
+        _mm256_storeu_pd(C + i * lda, Cval);
     }
 }
 
@@ -59,6 +56,10 @@ static void inline swap_ordering(int N, double *src, double *tgt){
 void square_dgemm(int lda, double *A, double *B, double *C) {
     double *A_row = (double *) malloc(lda * lda * sizeof(double));
     swap_ordering(lda, A, A_row);
+    double *B_row = (double *) malloc(lda * lda * sizeof(double));
+    swap_ordering(lda, B, B_row);
+    double *C_row = (double *) malloc(lda * lda * sizeof(double));
+    swap_ordering(lda, C, C_row);
 
     // For each block-row of A
     for (int i = 0; i < lda; i += BLOCK_SIZE) {
@@ -74,12 +75,15 @@ void square_dgemm(int lda, double *A, double *B, double *C) {
                 if((M == BLOCK_SIZE) && 
                     (N == BLOCK_SIZE) &&
                     (K == BLOCK_SIZE)){
-                    do_block(lda, M, N, K, A_row + i * lda + k, B + k + j * lda, C + i + j * lda);
+                    do_block(lda, M, N, K, A_row + i * lda + k, B_row + k * lda + j, C_row + i * lda + j);
                 }else{
-                    do_block_naive(lda, M, N, K, A_row + i * lda + k, B + k + j * lda, C + i + j * lda);
+                    do_block_naive(lda, M, N, K, A_row + i * lda + k, B_row + k * lda + j, C_row + i * lda + j);
                 }
             }
         }
     }
+    swap_ordering(lda, C_row, C);
+    free(C_row);
+    free(B_row);
     free(A_row);
 }
