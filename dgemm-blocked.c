@@ -3,7 +3,7 @@
 const char *dgemm_desc = "Simple blocked dgemm.";
 
 #ifndef BLOCK_SIZE
-#define BLOCK_SIZE 4
+#define BLOCK_SIZE 8
 #endif
 
 
@@ -30,20 +30,23 @@ static void inline do_block_naive(int lda, int M, int N, int K, double *A, doubl
 }
 
 static void inline do_block(int lda, int M, int N, int K, double *A, double *B, double *C) {
-    for (int i = 0; i < M; ++i) {
-        __m256d Cval = _mm256_loadu_pd(C + i * lda);
-        for (int k = 0; k < K; ++k) {
-            __m256d Aval = _mm256_set1_pd(A[i * lda + k]);
-            __m256d Bval = _mm256_loadu_pd(B + k * lda);
-            Cval = _mm256_fmadd_pd(Aval, Bval, Cval);
+    for (int i = 0; i < M; ++i) {  // Row iteration
+        for (int j = 0; j < N; j += 4) {  // Column iteration
+            __m256d Cval = _mm256_loadu_pd(C + i * lda + j);
+            for (int k = 0; k < K; ++k) {
+                __m256d Aval = _mm256_set1_pd(A[i * lda + k]);
+                __m256d Bval = _mm256_loadu_pd(B + k * lda + j);
+                Cval = _mm256_fmadd_pd(Aval, Bval, Cval);
+            }
+            _mm256_storeu_pd(C + i * lda + j, Cval);
         }
-        _mm256_storeu_pd(C + i * lda, Cval);
     }
 }
 
-static void inline swap_ordering(int N, double *src, double *tgt){
+// Convert column major to row major.
+static void inline swap_ordering(int N, double *src, double *tgt) {
     for (int i = 0; i < N; i++) {
-        for (int j = 0; j < N; j++){
+        for (int j = 0; j < N; j++) {
             tgt[i * N + j] = src[i + j * N];
         }
     }
@@ -72,11 +75,11 @@ void square_dgemm(int lda, double *A, double *B, double *C) {
                 int N = min(BLOCK_SIZE, lda - j);
                 int K = min(BLOCK_SIZE, lda - k);
                 // Perform individual block dgemm
-                if((M == BLOCK_SIZE) && 
+                if ((M == BLOCK_SIZE) &&
                     (N == BLOCK_SIZE) &&
-                    (K == BLOCK_SIZE)){
+                    (K == BLOCK_SIZE)) {
                     do_block(lda, M, N, K, A_row + i * lda + k, B_row + k * lda + j, C_row + i * lda + j);
-                }else{
+                } else {
                     do_block_naive(lda, M, N, K, A_row + i * lda + k, B_row + k * lda + j, C_row + i * lda + j);
                 }
             }
