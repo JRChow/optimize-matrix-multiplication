@@ -1,4 +1,4 @@
-#pragma GCC optimize ("unroll-loops")
+#pragma GCC optimize ("Ofast")
 
 #include <immintrin.h>
 
@@ -13,6 +13,7 @@ const char *dgemm_desc = "Simple blocked dgemm.";
 #define min(a, b) (((a)<(b))?(a):(b))
 
 // Register blocking
+__attribute__((optimize("unroll-loops")))
 static void inline do_block_register(int lda, int M, int N, int K, double *A, double *B, double *C) {
     for (int j = 0; j < N; j += 4) {
         for (int i = 0; i < M; i += 8) {
@@ -68,6 +69,7 @@ static void inline do_block_register(int lda, int M, int N, int K, double *A, do
 }
 
 // Level-1 blocking
+__attribute__((optimize("unroll-loops")))
 static void inline do_block_l1(int lda, int M, int N, int K, double *A, double *B, double *C) {
     for (int j = 0; j < N; j += BLOCK_SIZE_L1) {
         for (int k = 0; k < K; k += BLOCK_SIZE_L1) {
@@ -111,6 +113,7 @@ static void inline de_pad(int original_N, int padded_N, double *original, const 
  *  C := C + A * B
  * where A, B, and C are lda-by-lda matrices stored in column-major format.
  * On exit, A and B maintain their input values. */
+__attribute__((optimize("unroll-loops")))
 void square_dgemm(int lda, double *A, double *B, double *C) {
     // Determine padding
     int lda_pad = lda;
