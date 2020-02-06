@@ -3,8 +3,8 @@
 const char *dgemm_desc = "Simple blocked dgemm.";
 
 #ifndef BLOCK_SIZE_L2
-#define BLOCK_SIZE_L2 128
-#define BLOCK_SIZE_L1 64
+#define BLOCK_SIZE_L2 64
+#define BLOCK_SIZE_L1 32
 #define DIVISOR 8
 #endif
 
@@ -117,13 +117,10 @@ void square_dgemm(int lda, double *A, double *B, double *C) {
         lda_pad += DIVISOR - r;
     }
 
-//    double *A_pad = (double *) _mm_malloc(lda_pad * lda_pad * sizeof(double), 32);
     double *A_pad = (double *) _mm_malloc(lda_pad * lda_pad * sizeof(double), 32);
     pad(lda, lda_pad, A, A_pad);
-//    double *B_pad = (double *) _mm_malloc(lda_pad * lda_pad * sizeof(double), 32);
     double *B_pad = (double *) _mm_malloc(lda_pad * lda_pad * sizeof(double), 32);
     pad(lda, lda_pad, B, B_pad);
-//    double *C_pad = (double *) _mm_malloc(lda_pad * lda_pad * sizeof(double), 32);
     double *C_pad = (double *) _mm_malloc(lda_pad * lda_pad * sizeof(double), 32);
     pad(lda, lda_pad, C, C_pad);
 
