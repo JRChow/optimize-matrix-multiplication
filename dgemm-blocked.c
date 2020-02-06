@@ -10,22 +10,6 @@ const char *dgemm_desc = "Simple blocked dgemm.";
 
 #define min(a, b) (((a)<(b))?(a):(b))
 
-
-static void inline do_block_naive(int lda, int M, int N, int K, double *A, double *B, double *C) {
-    // For each row i of A
-    for (int i = 0; i < M; ++i) {
-        //For each column j of B
-        for (int j = 0; j < N; ++j) {
-            // Compute C(i,j)
-            double cij = C[i + j * lda];
-            for (int k = 0; k < K; ++k) {
-                cij += A[i + k * lda] * B[k + j * lda];
-            }
-            C[i + j * lda] = cij;
-        }
-    }
-}
-
 // Register blocking
 static void inline do_block_register(int lda, int M, int N, int K, double *A, double *B, double *C) {
     for (int j = 0; j < N; j += 4) {
@@ -94,20 +78,29 @@ static void inline do_block_l1(int lda, int M, int N, int K, double *A, double *
                                   A + i + k * lda,
                                   B + k + j * lda,
                                   C + i + j * lda);
-//                do_block_naive(lda, M_reg, N_reg, K_reg,
-//                                  A + i + k * lda,
-//                                  B + k + j * lda,
-//                                  C + i + j * lda);
             }
         }
     }
 }
 
-// Perform padding / de-padding
-static void inline padding(int N, const double *src, double *tgt, int src_skip, int tgt_skip) {
-    for (int i = 0; i < N; i++) {
-        for (int j = 0; j < N; j++) {
-            tgt[i * tgt_skip + j] = src[i * src_skip + j];
+// Perform padding
+static void inline pad(int original_N, int padded_N, const double *original, double *padded) {
+    for (int j = 0; j < padded_N; j++) {
+        for (int i = 0; i < padded_N; i++) {
+            if (i < original_N && j < original_N) {
+                padded[i + j * padded_N] = original[i + j * original_N];
+            } else {
+                padded[i + j * padded_N] = 0;
+            }
+        }
+    }
+}
+
+// Performs de-padding
+static void inline de_pad(int original_N, int padded_N, double *original, const double *padded) {
+    for (int j = 0; j < original_N; j++) {
+        for (int i = 0; i < original_N; i++) {
+            original[i + j * original_N] = padded[i + j * padded_N];
         }
     }
 }
@@ -125,14 +118,14 @@ void square_dgemm(int lda, double *A, double *B, double *C) {
     }
 
 //    double *A_pad = (double *) _mm_malloc(lda_pad * lda_pad * sizeof(double), 32);
-    double *A_pad = (double *) calloc(lda_pad * lda_pad, sizeof(double));
-    padding(lda, A, A_pad, lda, lda_pad);
+    double *A_pad = (double *) _mm_malloc(lda_pad * lda_pad * sizeof(double), 32);
+    pad(lda, lda_pad, A, A_pad);
 //    double *B_pad = (double *) _mm_malloc(lda_pad * lda_pad * sizeof(double), 32);
-    double *B_pad = (double *) calloc(lda_pad * lda_pad, sizeof(double));
-    padding(lda, B, B_pad, lda, lda_pad);
+    double *B_pad = (double *) _mm_malloc(lda_pad * lda_pad * sizeof(double), 32);
+    pad(lda, lda_pad, B, B_pad);
 //    double *C_pad = (double *) _mm_malloc(lda_pad * lda_pad * sizeof(double), 32);
-    double *C_pad = (double *) malloc(lda_pad * lda_pad * sizeof(double));
-    padding(lda, C, C_pad, lda, lda_pad);
+    double *C_pad = (double *) _mm_malloc(lda_pad * lda_pad * sizeof(double), 32);
+    pad(lda, lda_pad, C, C_pad);
 
     for (int j = 0; j < lda_pad; j += BLOCK_SIZE_L2) {
         for (int k = 0; k < lda_pad; k += BLOCK_SIZE_L2) {
@@ -150,8 +143,8 @@ void square_dgemm(int lda, double *A, double *B, double *C) {
     }
 
     // Un-pad C
-    padding(lda, C_pad, C, lda_pad, lda);
-    free(C_pad);
-    free(B_pad);
-    free(A_pad);
+    de_pad(lda, lda_pad, C, C_pad);
+    _mm_free(C_pad);
+    _mm_free(B_pad);
+    _mm_free(A_pad);
 }
