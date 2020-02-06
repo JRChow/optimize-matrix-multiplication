@@ -1,5 +1,3 @@
-#pragma GCC optimize ("Ofast")
-
 #include <immintrin.h>
 
 const char *dgemm_desc = "Simple blocked dgemm.";
