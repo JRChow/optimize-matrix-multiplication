@@ -10,6 +10,22 @@ const char *dgemm_desc = "Simple blocked dgemm.";
 
 #define min(a, b) (((a)<(b))?(a):(b))
 
+
+static void inline do_block_naive(int lda, int M, int N, int K, double *A, double *B, double *C) {
+    // For each row i of A
+    for (int i = 0; i < M; ++i) {
+        //For each column j of B
+        for (int j = 0; j < N; ++j) {
+            // Compute C(i,j)
+            double cij = C[i + j * lda];
+            for (int k = 0; k < K; ++k) {
+                cij += A[i + k * lda] * B[k + j * lda];
+            }
+            C[i + j * lda] = cij;
+        }
+    }
+}
+
 // Register blocking
 static void inline do_block_register(int lda, int M, int N, int K, double *A, double *B, double *C) {
     for (int j = 0; j < N; j += 4) {
@@ -32,10 +48,10 @@ static void inline do_block_register(int lda, int M, int N, int K, double *A, do
                 register __m256d A0 = _mm256_loadu_pd(A + (i + 0) + k * lda);
                 register __m256d A1 = _mm256_loadu_pd(A + (i + 4) + k * lda);
                 // Load B scalars
-                register __m256d B0 = _mm256_broadcast_sd(B + k + (j + 0) * lda);
-                register __m256d B1 = _mm256_broadcast_sd(B + k + (j + 1) * lda);
-                register __m256d B2 = _mm256_broadcast_sd(B + k + (j + 2) * lda);
-                register __m256d B3 = _mm256_broadcast_sd(B + k + (j + 3) * lda);
+                register __m256d B0 = _mm256_set1_pd(B[k + (j + 0) * lda]);
+                register __m256d B1 = _mm256_set1_pd(B[k + (j + 1) * lda]);
+                register __m256d B2 = _mm256_set1_pd(B[k + (j + 2) * lda]);
+                register __m256d B3 = _mm256_set1_pd(B[k + (j + 3) * lda]);
                 // Compute
                 C_00 = _mm256_fmadd_pd(A0, B0, C_00);
                 C_10 = _mm256_fmadd_pd(A1, B0, C_10);
@@ -78,6 +94,10 @@ static void inline do_block_l1(int lda, int M, int N, int K, double *A, double *
                                   A + i + k * lda,
                                   B + k + j * lda,
                                   C + i + j * lda);
+//                do_block_naive(lda, M_reg, N_reg, K_reg,
+//                                  A + i + k * lda,
+//                                  B + k + j * lda,
+//                                  C + i + j * lda);
             }
         }
     }
@@ -104,11 +124,14 @@ void square_dgemm(int lda, double *A, double *B, double *C) {
         lda_pad += DIVISOR - r;
     }
 
-    double *A_pad = (double *) _mm_malloc(lda_pad * lda_pad * sizeof(double), 32);
+//    double *A_pad = (double *) _mm_malloc(lda_pad * lda_pad * sizeof(double), 32);
+    double *A_pad = (double *) calloc(lda_pad * lda_pad, sizeof(double));
     padding(lda, A, A_pad, lda, lda_pad);
-    double *B_pad = (double *) _mm_malloc(lda_pad * lda_pad * sizeof(double), 32);
+//    double *B_pad = (double *) _mm_malloc(lda_pad * lda_pad * sizeof(double), 32);
+    double *B_pad = (double *) calloc(lda_pad * lda_pad, sizeof(double));
     padding(lda, B, B_pad, lda, lda_pad);
-    double *C_pad = (double *) _mm_malloc(lda_pad * lda_pad * sizeof(double), 32);
+//    double *C_pad = (double *) _mm_malloc(lda_pad * lda_pad * sizeof(double), 32);
+    double *C_pad = (double *) malloc(lda_pad * lda_pad * sizeof(double));
     padding(lda, C, C_pad, lda, lda_pad);
 
     for (int j = 0; j < lda_pad; j += BLOCK_SIZE_L2) {
@@ -128,7 +151,7 @@ void square_dgemm(int lda, double *A, double *B, double *C) {
 
     // Un-pad C
     padding(lda, C_pad, C, lda_pad, lda);
-    _mm_free(C_pad);
-    _mm_free(B_pad);
-    _mm_free(A_pad);
+    free(C_pad);
+    free(B_pad);
+    free(A_pad);
 }
