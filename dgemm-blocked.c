@@ -1,3 +1,5 @@
+#pragma GCC optimize ("unroll-loops")
+
 #include <immintrin.h>
 
 const char *dgemm_desc = "Simple blocked dgemm.";
